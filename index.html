@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Auto-Updating App</title>
+<title>Auto-Updating App – Next Level</title>
 <style>
   body { font-family: sans-serif; padding: 2rem; background: #f4f4f4; }
   #status { margin-top: 1rem; font-weight: bold; }
@@ -10,7 +10,7 @@
 </style>
 </head>
 <body>
-<h1>Auto-Updating App</h1>
+<h1>Auto-Updating App – Next Level</h1>
 <div id="status">Initializing...</div>
 <div id="data"></div>
 
@@ -20,93 +20,120 @@ const GITHUB_REPO = 'Mikado999/Online-File-Update-Test';
 const FILE_PATH = 'index.html';
 const BRANCH = 'main';
 const RAW_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/${FILE_PATH}`;
-const GITHUB_TOKEN = ''; // optional: for push updates
-const CHECK_INTERVAL = 30000; // check for updates every 30 seconds
+const GITHUB_TOKEN = ''; // optional for push
+const CHECK_INTERVAL = 30000; // check every 30 seconds
 /* ========================================== */
 
 /* ================= LOCAL DATA ================= */
-let appData = JSON.parse(localStorage.getItem('appData') || '{"runs":0,"version":1}');
+let appData = JSON.parse(localStorage.getItem('appData') || '{"runs":0,"version":1,"uniqueID":"0000"}');
 const status = document.getElementById('status');
 const dataDiv = document.getElementById('data');
 
-/* ================= SHOW LOCAL DATA ================= */
+/* ================= HELPER FUNCTIONS ================= */
+function generateUniqueID() {
+    return Date.now().toString(36) + '-' + Math.floor(Math.random()*10000).toString(36);
+}
+
 function showData() {
-  dataDiv.textContent = JSON.stringify(appData, null, 2);
+    dataDiv.textContent = JSON.stringify(appData, null, 2);
 }
 
-/* ================= UPDATE LOCAL DATA ================= */
 function updateLocalData() {
-  appData.runs += 1;
-  localStorage.setItem('appData', JSON.stringify(appData));
-  status.textContent = `Runs: ${appData.runs}, Version: ${appData.version}`;
-  showData();
+    appData.runs += 1;
+    if (!appData.uniqueID) appData.uniqueID = generateUniqueID();
+    localStorage.setItem('appData', JSON.stringify(appData));
+    status.textContent = `Runs: ${appData.runs}, Version: ${appData.version}`;
+    showData();
 }
 
-/* ================= SELF-UPDATE FUNCTION ================= */
+/* ================= SELF-UPDATE ================= */
 async function checkForUpdates() {
-  try {
-    const res = await fetch(RAW_URL);
-    if (!res.ok) throw new Error('GitHub fetch failed');
-    const remoteHTML = await res.text();
+    try {
+        const res = await fetch(RAW_URL);
+        if (!res.ok) throw new Error('GitHub fetch failed');
+        const remoteHTML = await res.text();
 
-    // Parse version from remote file
-    const match = remoteHTML.match(/"version":\s*(\d+)/);
-    if (!match) return;
-    const remoteVersion = parseInt(match[1]);
+        // Extract version and uniqueID from remote file
+        const versionMatch = remoteHTML.match(/"version":\s*(\d+)/);
+        const idMatch = remoteHTML.match(/"uniqueID":\s*"([a-z0-9\-]+)"/);
 
-    if (remoteVersion > appData.version) {
-      console.log(`New version detected: ${remoteVersion}`);
-      status.textContent = `Updating to version ${remoteVersion}...`;
+        if (!versionMatch || !idMatch) return;
+        const remoteVersion = parseInt(versionMatch[1]);
+        const remoteID = idMatch[1];
 
-      // Replace the page content
-      document.open();
-      document.write(remoteHTML);
-      document.close();
+        // Auto-update only if remote version is newer
+        if (remoteVersion > appData.version) {
+            console.log(`New version detected: ${remoteVersion}, ID: ${remoteID}`);
+            status.textContent = `Updating to version ${remoteVersion}...`;
 
-      // Update local version after reload
-      localStorage.setItem('appData', JSON.stringify({...appData, version: remoteVersion}));
+            // Preserve local runs
+            const localRuns = appData.runs;
+
+            // Replace page with new HTML
+            document.open();
+            document.write(remoteHTML);
+            document.close();
+
+            // Restore local runs and update version
+            const newData = {
+                runs: localRuns,
+                version: remoteVersion,
+                uniqueID: remoteID
+            };
+            localStorage.setItem('appData', JSON.stringify(newData));
+        }
+
+    } catch (err) {
+        console.error('Update check failed:', err);
+        status.textContent = 'Could not check for updates';
     }
-  } catch (err) {
-    console.error('Update check failed:', err);
-    status.textContent = 'Could not check for updates';
-  }
 }
 
-/* ================= OPTIONAL PUSH FUNCTION ================= */
+/* ================= OPTIONAL PUSH ================= */
 async function pushToGitHub() {
-  if (!GITHUB_TOKEN) return; // read-only
-  try {
-    const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`;
-    const r = await fetch(apiUrl, { headers: { Authorization: `token ${GITHUB_TOKEN}` } });
-    if (!r.ok) return;
-    const sha = (await r.json()).sha;
+    if (!GITHUB_TOKEN) return;
+    try {
+        const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`;
+        const r = await fetch(apiUrl, { headers: { Authorization: `token ${GITHUB_TOKEN}` } });
+        if (!r.ok) return;
+        const sha = (await r.json()).sha;
 
-    const content = btoa(unescape(encodeURIComponent(document.documentElement.outerHTML)));
-    const payload = {
-      message: `Auto update (runs: ${appData.runs})`,
-      content,
-      sha,
-      branch: BRANCH
-    };
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: { Authorization: `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (putRes.ok) console.log('GitHub push successful');
-  } catch (err) {
-    console.error('GitHub push failed:', err);
-  }
+        // Add unique version label for this push
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const newVersion = appData.version + 1;
+        appData.version = newVersion;
+        appData.uniqueID = generateUniqueID();
+        localStorage.setItem('appData', JSON.stringify(appData));
+
+        // Inject version and uniqueID into the HTML
+        let htmlContent = document.documentElement.outerHTML;
+        htmlContent = htmlContent.replace(/"version":\s*\d+/, `"version": ${newVersion}`);
+        htmlContent = htmlContent.replace(/"uniqueID":\s*".*?"/, `"uniqueID": "${appData.uniqueID}"`);
+
+        const contentEncoded = btoa(unescape(encodeURIComponent(htmlContent)));
+        const payload = {
+            message: `Auto-update v${newVersion} (${timestamp})`,
+            content: contentEncoded,
+            sha,
+            branch: BRANCH
+        };
+
+        const putRes = await fetch(apiUrl, {
+            method: 'PUT',
+            headers: { Authorization: `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (putRes.ok) console.log(`GitHub push v${newVersion} successful`);
+    } catch (err) {
+        console.error('GitHub push failed:', err);
+    }
 }
 
 /* ================= MAIN LOOP ================= */
 updateLocalData();
 checkForUpdates();
-
-// Periodically check for updates in the background
 setInterval(checkForUpdates, CHECK_INTERVAL);
 
-// Optional: auto-push after 10s
 if (GITHUB_TOKEN) setTimeout(pushToGitHub, 10000);
 
 </script>
@@ -115,8 +142,10 @@ if (GITHUB_TOKEN) setTimeout(pushToGitHub, 10000);
 <script type="application/json" id="appData">
 {
   "runs": 0,
-  "version": 1
+  "version": 1,
+  "uniqueID": "0000"
 }
 </script>
+
 
 
