@@ -1,32 +1,126 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Self-Updating App</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; background: #f4f4f4; }
+    #status { margin-top: 1rem; font-weight: bold; }
+    #data { margin-top: 1rem; white-space: pre-wrap; background: #fff; padding: 1rem; border-radius: 5px; box-shadow: 0 0 5px rgba(0,0,0,0.1);}
+  </style>
 </head>
 <body>
-<h1>Self-Updating GitHub App</h1>
-<div id="status"></div>
+  <h1>Self-Updating App</h1>
+  <div id="status">Initializing...</div>
+  <div id="data"></div>
 
 <script>
+/* ================= CONFIG ================= */
 const GITHUB_REPO = 'Mikado999/Online-File-Update-Test';
-const FILE_PATH = 'update.py';
+const FILE_PATH = 'index.html';
 const BRANCH = 'main';
 const RAW_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/${FILE_PATH}`;
+// Optional: GitHub personal access token for pushing (enter manually)
+const GITHUB_TOKEN = ''; // leave empty for read-only
+/* ========================================== */
 
-let data = JSON.parse(localStorage.getItem('myData') || '{"runs":0}');
+/* ================= LOCAL DATA ================= */
+let appData = JSON.parse(localStorage.getItem('appData') || '{"runs":0,"version":1}');
+const status = document.getElementById('status');
+const dataDiv = document.getElementById('data');
 
-data.runs += 1;
-document.getElementById('status').innerText = `Runs: ${data.runs}`;
-localStorage.setItem('myData', JSON.stringify(data));
+/* ================= SHOW LOCAL DATA ================= */
+function showData() {
+  dataDiv.textContent = JSON.stringify(appData, null, 2);
+}
 
-// Fetch latest GitHub version
-fetch(RAW_URL)
-  .then(res => res.text())
-  .then(githubCode => {
-      console.log('Fetched latest code from GitHub');
-      // Optional: parse and update data or logic
-  })
-  .catch(err => console.error('GitHub fetch failed', err));
+/* ================= UPDATE LOCAL DATA ================= */
+function updateLocalData() {
+  appData.runs += 1;
+  localStorage.setItem('appData', JSON.stringify(appData));
+  status.textContent = `This app has run ${appData.runs} times`;
+  showData();
+}
+
+/* ================= PULL FROM GITHUB ================= */
+async function pullFromGitHub() {
+  try {
+    const res = await fetch(RAW_URL);
+    if (!res.ok) throw new Error('GitHub fetch failed');
+    const githubCode = await res.text();
+
+    // Optional: parse version from GitHub if embedded
+    const versionMatch = githubCode.match(/"version":\s*(\d+)/);
+    if (versionMatch) {
+      const remoteVersion = parseInt(versionMatch[1]);
+      if (remoteVersion > appData.version) {
+        status.textContent = `New version ${remoteVersion} detected. Updating...`;
+        alert('A new version is available. Please reload the page to apply updates.');
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Could not fetch latest GitHub version';
+  }
+}
+
+/* ================= PUSH TO GITHUB ================= */
+async function pushToGitHub() {
+  if (!GITHUB_TOKEN) return; // read-only mode
+  try {
+    // Get current SHA of the file
+    const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FILE_PATH}`;
+    let sha;
+    const r = await fetch(apiUrl, {
+      headers: { Authorization: `token ${GITHUB_TOKEN}` }
+    });
+    if (r.ok) {
+      const json = await r.json();
+      sha = json.sha;
+    } else {
+      console.warn('Cannot fetch SHA. Push aborted.');
+      return;
+    }
+
+    const content = btoa(unescape(encodeURIComponent(document.documentElement.outerHTML)));
+    const payload = {
+      message: `Update index.html (runs: ${appData.runs})`,
+      content: content,
+      sha: sha,
+      branch: BRANCH
+    };
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (putRes.ok) {
+      status.textContent = 'GitHub push successful!';
+    } else {
+      status.textContent = 'GitHub push failed.';
+      console.error(await putRes.text());
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/* ================= MAIN ================= */
+updateLocalData();
+pullFromGitHub();
+
+// Optional: auto-push after 5 seconds (only with token)
+if (GITHUB_TOKEN) {
+  setTimeout(() => {
+    pushToGitHub();
+  }, 5000);
+}
+
 </script>
 </body>
 </html>
