@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Self-Updating App</title>
+</head>
+<body>
+<h1>Self-Updating GitHub App</h1>
+<div id="status"></div>
+
+<script>
+const GITHUB_REPO = 'Mikado999/Online-File-Update-Test';
+const FILE_PATH = 'update.py';
+const BRANCH = 'main';
+const RAW_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/${FILE_PATH}`;
+
+let data = JSON.parse(localStorage.getItem('myData') || '{"runs":0}');
+
+data.runs += 1;
+document.getElementById('status').innerText = `Runs: ${data.runs}`;
+localStorage.setItem('myData', JSON.stringify(data));
+
+// Fetch latest GitHub version
+fetch(RAW_URL)
+  .then(res => res.text())
+  .then(githubCode => {
+      console.log('Fetched latest code from GitHub');
+      // Optional: parse and update data or logic
+  })
+  .catch(err => console.error('GitHub fetch failed', err));
+</script>
+</body>
+</html>
