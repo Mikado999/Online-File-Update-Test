@@ -19,6 +19,7 @@
 const GITHUB_REPO = 'Mikado999/Online-File-Update-Test';
 const FILE_PATH = 'index.html';
 const BRANCH = 'main';
+// Correct raw URL for fetching the file
 const RAW_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/${FILE_PATH}`;
 // Optional: GitHub personal access token for pushing (enter manually)
 const GITHUB_TOKEN = ''; // leave empty for read-only
@@ -90,37 +91,5 @@ async function pushToGitHub() {
       branch: BRANCH
     };
 
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: `token ${GITHUB_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+    con
 
-    if (putRes.ok) {
-      status.textContent = 'GitHub push successful!';
-    } else {
-      status.textContent = 'GitHub push failed.';
-      console.error(await putRes.text());
-    }
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-/* ================= MAIN ================= */
-updateLocalData();
-pullFromGitHub();
-
-// Optional: auto-push after 5 seconds (only with token)
-if (GITHUB_TOKEN) {
-  setTimeout(() => {
-    pushToGitHub();
-  }, 5000);
-}
-
-</script>
-</body>
-</html>
